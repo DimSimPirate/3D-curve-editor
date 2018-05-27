@@ -3,6 +3,7 @@ import os
 import unittest
 import numpy
 import math
+#import unittest
 
 class CurveEditor:
     def __init__(self, parent):
@@ -353,3 +354,8 @@ class Logic:
             displayNode = self.DestinationNode.GetDisplayNode()
             if displayNode:
                 displayNode.SetActiveScalarName('')
+
+#class Tests(unittest.TestCase):
+#    def test(self):
+#        curveEditor = CurveEditor()
+#        self.assertEquals()
