@@ -55,7 +55,7 @@ class CurveEditorWidget:
         self.SourceSelector.noneEnabled = True
         self.SourceSelector.renameEnabled = True
         self.SourceSelector.setMRMLScene( slicer.mrmlScene )
-        self.SourceSelector.setToolTip("Select fiducial source")
+        self.SourceSelector.setToolTip("Select source of points or create a new list")
         layout.addRow("Source points: ", self.SourceSelector)
 
         #Selecting destination for new curve
@@ -67,7 +67,7 @@ class CurveEditorWidget:
         self.DestinationSelector.renameEnabled = True
         self.DestinationSelector.selectNodeUponCreation = True
         self.DestinationSelector.setMRMLScene( slicer.mrmlScene )
-        self.DestinationSelector.setToolTip( "Select destination for curve" )
+        self.DestinationSelector.setToolTip( "Select existing curve model or create a new one" )
         layout.addRow("Curve model: ", self.DestinationSelector)
 
         #x, y, z inputs for new fiducial
@@ -86,7 +86,7 @@ class CurveEditorWidget:
 
         #Add fiducial button
         self.AddFiducialButton = qt.QPushButton("Add Fiducial")
-        self.AddFiducialButton.toolTip = "Adds curve point using given x, y, z coordinates"
+        self.AddFiducialButton.toolTip = "Adds fiducial using given x, y, z coordinates"
         self.AddFiducialButton.enabled = True
         layout.addRow("", self.AddFiducialButton)
 
