@@ -10,13 +10,13 @@ class CurveEditor:
         parent.categories = ["CurveEditor"]
         #parent.dependencies = []
         parent.contributors = ["Matthew Burgess"]
-        parent.helpText = """Create 3D curves by: \n
-            - First selecting input points using the Fiducial tool \n
-            - Select the source points either from an existing list, or F for newly created set \n
-            - Select model to save the curve to \n
-            - Set the radius of the 3D curve \n
-            - Select either none (linear) or cardinal (curved) for interpolation \n
-            - Select auto update for continuous feedback \n
+        parent.helpText = """Create 3D curves by: \r\n
+            - First selecting input points using the Fiducial tool \r\n
+            - Select the source points either from an existing list, or F for newly created set \r\n
+            - Select model to save the curve to \r\n
+            - Set the radius of the 3D curve \r\n
+            - Select either none (linear) or cardinal (curved) for interpolation \r\n
+            - Select auto update for continuous feedback \r\n
             - Press Generate Curve"""
         self.parent = parent
 
@@ -107,7 +107,9 @@ class CurveEditorWidget:
         #Select the method of interpolation
         self.InterpolationLayout = qt.QHBoxLayout()
         self.InterpolationLinear = qt.QRadioButton("Linear")
+        self.InterpolationLinear.setToolTip( "Straight lines from point to point" )
         self.InterpolationSpline = qt.QRadioButton("Spline")
+        self.InterpolationSpline.setToolTip( "Cardinal spline will create curvature between points" )
         self.InterpolationLayout.addWidget(self.InterpolationLinear)
         self.InterpolationLayout.addWidget(self.InterpolationSpline)
         self.InterpolationGroup = qt.QButtonGroup()
@@ -226,16 +228,11 @@ class Logic:
         self.SourceNode = None
         self.DestinationNode = None
         self.CurveThickness = 5.0
-
         self.NumberOfIntermediatePoints = 20
         self.ModelColor = [0.0, 1.0, 0.0]
-
         self.CurvePoly = None
         self.Resolution = 30
-
         self.InterpolationMethod = 0
-
-#        self.CurveLength = -1.0  ## Length of the curve (<0 means 'not measured')
 
     def setCurveThickness(self, radius):
         self.CurveThickness = radius
@@ -245,131 +242,67 @@ class Logic:
         self.InterpolationMethod = method
         self.updateCurve()
 
-#    def controlPointsUpdated(self,caller,event):
-#        if caller.IsA('vtkMRMLMarkupsFiducialNode') and event == 'ModifiedEvent':
-#            self.updateCurve()
-
     def nodeToPoly(self, sourceNode, outputPoly):
         points = vtk.vtkPoints()
         cellArray = vtk.vtkCellArray()
-
-        nOfControlPoints = sourceNode.GetNumberOfFiducials()
+        numControlPoints = sourceNode.GetNumberOfFiducials()
         pos = [0.0, 0.0, 0.0]
         posStartEnd = [0.0, 0.0, 0.0]
-
         offset = 0
 
-        points.SetNumberOfPoints(nOfControlPoints)
-        cellArray.InsertNextCell(nOfControlPoints)
+        points.SetNumberOfPoints(numControlPoints)
+        cellArray.InsertNextCell(numControlPoints)
 
-        for i in range(nOfControlPoints):
+        for i in range(numControlPoints):
             sourceNode.GetNthFiducialPosition(i,pos)
             points.SetPoint(offset+i,pos)
             cellArray.InsertCellPoint(offset+i)
 
-        offset = offset + nOfControlPoints
+        offset = offset + numControlPoints
 
         outputPoly.Initialize()
         outputPoly.SetPoints(points)
         outputPoly.SetLines(cellArray)
 
     def nodeToPolySpline(self, sourceNode, outputPoly):
-
-        nOfControlPoints = sourceNode.GetNumberOfFiducials()
+        numControlPoints = sourceNode.GetNumberOfFiducials()
         pos = [0.0, 0.0, 0.0]
 
-        # One spline for each direction.
-        aSplineX = vtk.vtkCardinalSpline()
-        aSplineY = vtk.vtkCardinalSpline()
-        aSplineZ = vtk.vtkCardinalSpline()
+        xSpline = vtk.vtkCardinalSpline()
+        ySpline = vtk.vtkCardinalSpline()
+        zSpline = vtk.vtkCardinalSpline()
+        xSpline.ClosedOff()
+        ySpline.ClosedOff()
+        zSpline.ClosedOff()
 
-        aSplineX.ClosedOff()
-        aSplineY.ClosedOff()
-        aSplineZ.ClosedOff()
-
-        for i in range(0, nOfControlPoints):
+        for i in range(0, numControlPoints):
             sourceNode.GetNthFiducialPosition(i, pos)
-            aSplineX.AddPoint(i, pos[0])
-            aSplineY.AddPoint(i, pos[1])
-            aSplineZ.AddPoint(i, pos[2])
+            xSpline.AddPoint(i, pos[0])
+            ySpline.AddPoint(i, pos[1])
+            zSpline.AddPoint(i, pos[2])
 
-        # Interpolate x, y and z by using the three spline filters and
-        # create new points
-        nInterpolatedPoints = (self.Resolution+2)*(nOfControlPoints-1) # One section is devided into self.Resolution segments
+        interpolatedPoints = (self.Resolution+2)*(numControlPoints-1)
         points = vtk.vtkPoints()
         r = [0.0, 0.0]
-        aSplineX.GetParametricRange(r)
+        xSpline.GetParametricRange(r)
         t = r[0]
         p = 0
-        tStep = (nOfControlPoints-1.0)/(nInterpolatedPoints-1.0)
-        nOutputPoints = 0
+        tStep = (numControlPoints-1.0)/(interpolatedPoints-1.0)
+        numOutputPoints = 0
 
         while t < r[1]:
-            points.InsertPoint(p, aSplineX.Evaluate(t), aSplineY.Evaluate(t), aSplineZ.Evaluate(t))
+            points.InsertPoint(p, xSpline.Evaluate(t), ySpline.Evaluate(t), zSpline.Evaluate(t))
             t = t + tStep
             p = p + 1
-        nOutputPoints = p
+        numOutputPoints = p
 
         lines = vtk.vtkCellArray()
-        lines.InsertNextCell(nOutputPoints)
-        for i in range(0, nOutputPoints):
+        lines.InsertNextCell(numOutputPoints)
+        for i in range(0, numOutputPoints):
             lines.InsertCellPoint(i)
 
         outputPoly.SetPoints(points)
         outputPoly.SetLines(lines)
-
-    def pathToPoly(self, path, poly):
-        points = vtk.vtkPoints()
-        cellArray = vtk.vtkCellArray()
-
-        points = vtk.vtkPoints()
-        poly.SetPoints(points)
-
-        lines = vtk.vtkCellArray()
-        poly.SetLines(lines)
-
-        linesIDArray = lines.GetData()
-        linesIDArray.Reset()
-        linesIDArray.InsertNextTuple1(0)
-
-        polygons = vtk.vtkCellArray()
-        poly.SetPolys( polygons )
-        idArray = polygons.GetData()
-        idArray.Reset()
-        idArray.InsertNextTuple1(0)
-
-        for point in path:
-            pointIndex = points.InsertNextPoint(*point)
-            linesIDArray.InsertNextTuple1(pointIndex)
-            linesIDArray.SetTuple1( 0, linesIDArray.GetNumberOfTuples() - 1 )
-            lines.SetNumberOfCells(1)
-
-    def calculateLineLength(self, poly):
-        lines = poly.GetLines()
-        points = poly.GetPoints()
-        pts = vtk.vtkIdList()
-
-        lines.GetCell(0, pts)
-        ip = numpy.array(points.GetPoint(pts.GetId(0)))
-        n = pts.GetNumberOfIds()
-
-        # Check if there is overlap between the first and last segments
-        # (for making sure to close the loop for spline curves)
-        if n > 2:
-            slp = numpy.array(points.GetPoint(pts.GetId(n-2)))
-            # Check distance between the first point and the second last point
-            if numpy.linalg.norm(slp-ip) < 0.00001:
-                n = n - 1
-
-        length = 0.0
-        pp = ip
-        for i in range(1,n):
-            p = numpy.array(points.GetPoint(pts.GetId(i)))
-            length = length + numpy.linalg.norm(pp-p)
-            pp = p
-
-        return length
-
 
     def updateCurve(self):
 
@@ -378,30 +311,20 @@ class Logic:
             if self.SourceNode.GetNumberOfFiducials() < 2:
                 if self.CurvePoly != None:
                     self.CurvePoly.Initialize()
-
-#                self.CurveLength = 0.0
-
             else:
-
                 if self.CurvePoly == None:
                     self.CurvePoly = vtk.vtkPolyData()
-
                 if self.DestinationNode.GetDisplayNodeID() == None:
                     modelDisplayNode = slicer.vtkMRMLModelDisplayNode()
                     modelDisplayNode.SetColor(self.ModelColor)
                     slicer.mrmlScene.AddNode(modelDisplayNode)
                     self.DestinationNode.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
-
                 if self.InterpolationMethod == 0:
                     self.nodeToPoly(self.SourceNode, self.CurvePoly)
-
                 elif self.InterpolationMethod == 1: # Cardinal Spline
                     self.nodeToPolySpline(self.SourceNode, self.CurvePoly)
 
-#                self.CurveLength = self.calculateLineLength(self.CurvePoly)
-
             tubeFilter = vtk.vtkTubeFilter()
-
             tubeFilter.SetInputData(self.CurvePoly)
             tubeFilter.SetRadius(self.CurveThickness)
             tubeFilter.SetNumberOfSides(20)
