@@ -8,15 +8,15 @@ class CurveEditor:
     def __init__(self, parent):
         parent.title = "3D Curve Editor"
         parent.categories = ["CurveEditor"]
-        parent.dependencies = []
+        #parent.dependencies = []
         parent.contributors = ["Matthew Burgess"]
-        parent.helpText = """Create 3D curves by:
-            - First selecting input points using the Fiducial tool
-            - Select the source points either from an existing list, or F for newly created set
-            - Select model to save the curve to
-            - Set the radius of the 3D curve
-            - Select either none (linear) or cardinal (curved) for interpolation
-            - Select auto update for continuous feedback
+        parent.helpText = """Create 3D curves by: \n
+            - First selecting input points using the Fiducial tool \n
+            - Select the source points either from an existing list, or F for newly created set \n
+            - Select model to save the curve to \n
+            - Set the radius of the 3D curve \n
+            - Select either none (linear) or cardinal (curved) for interpolation \n
+            - Select auto update for continuous feedback \n
             - Press Generate Curve"""
         self.parent = parent
 
@@ -32,22 +32,21 @@ class CurveEditorWidget:
         if not parent:
             self.setup()
             self.parent.show()
-        self.logic = CurveLogic()
+        self.logic = Logic()
 
     def setup(self):
 
-        # Tags to manage event observers
+        # Tags are used to manage event ovservers
         self.tagSourceNode = None
         self.tagDestinationNode = None
 
-        #Generate inputs and set up a new curve
-        createCurveButton = ctk.ctkCollapsibleButton()
-        createCurveButton.text = "Create Curve"
-        self.layout.addWidget(createCurveButton)
+        #Set up area for creating curves
+        createCurveBttn = ctk.ctkCollapsibleButton()
+        createCurveBttn.text = "Create Curve"
+        self.layout.addWidget(createCurveBttn)
+        layout = qt.QFormLayout(createCurveBttn)
 
-        curveLayout = qt.QFormLayout(createCurveButton)
-
-        #Select source points
+        #Selecting source points from fiducials
         self.SourceSelector = slicer.qMRMLNodeComboBox()
         self.SourceSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
         self.SourceSelector.addEnabled = True
@@ -55,12 +54,10 @@ class CurveEditorWidget:
         self.SourceSelector.noneEnabled = True
         self.SourceSelector.renameEnabled = True
         self.SourceSelector.setMRMLScene( slicer.mrmlScene )
-        self.SourceSelector.setToolTip( "Pick up a Markups node listing fiducials." )
-        curveLayout.addRow("Source points: ", self.SourceSelector)
+        self.SourceSelector.setToolTip("Select fiducial source")
+        layout.addRow("Source points: ", self.SourceSelector)
 
-        #
-        # Target point (vtkMRMLMarkupsFiducialNode)
-        #
+        #Selecting destination for new curve
         self.DestinationSelector = slicer.qMRMLNodeComboBox()
         self.DestinationSelector.nodeTypes = ( ("vtkMRMLModelNode"), "" )
         self.DestinationSelector.addEnabled = True
@@ -69,25 +66,41 @@ class CurveEditorWidget:
         self.DestinationSelector.renameEnabled = True
         self.DestinationSelector.selectNodeUponCreation = True
         self.DestinationSelector.setMRMLScene( slicer.mrmlScene )
-        self.DestinationSelector.setToolTip( "Pick up or create a Model node." )
-        curveLayout.addRow("Curve model: ", self.DestinationSelector)
+        self.DestinationSelector.setToolTip( "Select destination for curve" )
+        layout.addRow("Curve model: ", self.DestinationSelector)
 
-        #
-        # Radius for the tube
-        #
+        #x, y, z inputs for new fiducial
+        self.AddFudicialLayout = qt.QHBoxLayout()
+        self.AddX = qt.QLineEdit("X")
+        #self.addX.placeHolderText = "X"
+        #self.addX.validator = qt.DoubleValidator {}
+        self.AddY = qt.QLineEdit("Y")
+        self.AddZ = qt.QLineEdit("Z")
+        self.AddFudicialLayout.addWidget(self.AddX)
+        self.AddFudicialLayout.addWidget(self.AddY)
+        self.AddFudicialLayout.addWidget(self.AddZ)
+        layout.addRow("X, Y, Z coordinates for new fiducial: ", self.AddFudicialLayout)
+
+        #self.AddFudicialGroup = qt.QGroupBox()
+
+        #Add fudicial button
+        self.AddFudicialButton = qt.QPushButton("Add Fiducial")
+        self.AddFudicialButton.toolTip = "Adds curve point using given x, y, z coordinates"
+        self.AddFudicialButton.enabled = True
+        layout.addRow("", self.AddFudicialButton)
+
+        #Radius of curve
         self.RadiusSliderWidget = ctk.ctkSliderWidget()
         self.RadiusSliderWidget.singleStep = 1.0
         self.RadiusSliderWidget.minimum = 1.0
         self.RadiusSliderWidget.maximum = 50.0
         self.RadiusSliderWidget.value = 5.0
         self.RadiusSliderWidget.setToolTip("Set the raidus of the tube.")
-        curveLayout.addRow("Radius (mm): ", self.RadiusSliderWidget)
+        layout.addRow("Radius (mm): ", self.RadiusSliderWidget)
 
-        #
-        # Radio button to select interpolation method
-        #
+        #Select the method of interpolation
         self.InterpolationLayout = qt.QHBoxLayout()
-        self.InterpolationNone = qt.QRadioButton("None")
+        self.InterpolationNone = qt.QRadioButton("Linear")
         self.InterpolationCardinalSpline = qt.QRadioButton("Cardinal Spline")
         self.InterpolationLayout.addWidget(self.InterpolationNone)
         self.InterpolationLayout.addWidget(self.InterpolationCardinalSpline)
@@ -96,7 +109,7 @@ class CurveEditorWidget:
         self.InterpolationGroup.addButton(self.InterpolationNone)
         self.InterpolationGroup.addButton(self.InterpolationCardinalSpline)
 
-        curveLayout.addRow("Interpolation: ", self.InterpolationLayout)
+        layout.addRow("Interpolation: ", self.InterpolationLayout)
 
         #
         # Check box to start curve visualization
@@ -104,7 +117,7 @@ class CurveEditorWidget:
         self.EnableAutoUpdateCheckBox = qt.QCheckBox()
         self.EnableAutoUpdateCheckBox.checked = 0
         self.EnableAutoUpdateCheckBox.setToolTip("If checked, the CurveMaker module keeps updating the model as the points are updated.")
-        curveLayout.addRow("Auto update:", self.EnableAutoUpdateCheckBox)
+        layout.addRow("Auto update:", self.EnableAutoUpdateCheckBox)
 
         #
         # Button to generate a curve
@@ -112,7 +125,7 @@ class CurveEditorWidget:
         self.GenerateButton = qt.QPushButton("Generate Curve")
         self.GenerateButton.toolTip = "Generate Curve"
         self.GenerateButton.enabled = True
-        curveLayout.addRow("", self.GenerateButton)
+        layout.addRow("", self.GenerateButton)
 
         # Connections
         self.InterpolationNone.connect('clicked(bool)', self.onSelectInterpolationNone)
@@ -129,10 +142,6 @@ class CurveEditorWidget:
         self.onSelectInterpolationCardinalSpline(True)
 
         self.layout.addStretch(1)
-
-
-    def cleanup(self):
-        pass
 
     def onEnableAutoUpdate(self, state):
         self.logic.enableAutomaticUpdate(state)
@@ -212,7 +221,7 @@ class CurveEditorWidget:
             self.tag = None
 
 
-class CurveLogic:
+class Logic:
 
     def __init__(self):
         self.SourceNode = None
