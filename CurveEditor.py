@@ -110,11 +110,9 @@ class CurveEditorWidget:
         self.InterpolationSpline = qt.QRadioButton("Spline")
         self.InterpolationLayout.addWidget(self.InterpolationLinear)
         self.InterpolationLayout.addWidget(self.InterpolationSpline)
-
         self.InterpolationGroup = qt.QButtonGroup()
         self.InterpolationGroup.addButton(self.InterpolationLinear)
         self.InterpolationGroup.addButton(self.InterpolationSpline)
-
         layout.addRow("Interpolation: ", self.InterpolationLayout)
 
         #Button for generating specified curve
@@ -135,8 +133,8 @@ class CurveEditorWidget:
         self.AddZ.textChanged.connect(lambda inputSelection: self.checkInputState('z'))
         self.AddZ.textChanged.emit(self.AddZ.text)
         self.AddFiducialButton.connect('clicked(bool)', self.addFiducial)
-        self.RadiusSliderWidget.connect("valueChanged(double)", self.onTubeUpdated)
-        self.GenerateButton.connect('clicked(bool)', self.logic.generateCurve)
+        self.RadiusSliderWidget.connect("valueChanged(double)", self.onThicknessUpdated)
+        self.GenerateButton.connect('clicked(bool)', self.generateCurve)
 
         #Default checkboxes
         self.InterpolationSpline.setChecked(True)
@@ -145,36 +143,18 @@ class CurveEditorWidget:
         self.layout.addStretch(1)
 
     def onSourceSelected(self):
-        # Remove observer if previous node exists
-        if self.logic.SourceNode and self.tagSourceNode:
-            self.logic.SourceNode.RemoveObserver(self.tagSourceNode)
-
-        # Update selected node, add observer, and update control points
         if self.SourceSelector.currentNode():
             self.logic.SourceNode = self.SourceSelector.currentNode()
-
-            # Check if model has already been generated with for this fiducial list
             curveId = self.logic.SourceNode.GetAttribute('CurveEditor.CurveModel')
             self.DestinationSelector.setCurrentNodeID(curveId)
-            self.tagSourceNode = self.logic.SourceNode.AddObserver('ModifiedEvent', self.logic.controlPointsUpdated)
         self.updateFiducialsTable();
 
         if (self.SourceSelector.currentNode() != None and self.DestinationSelector.currentNode() != None):
             self.logic.SourceNode.SetAttribute('CurveEditor.CurveModel',self.logic.DestinationNode.GetID())
 
     def onDestinationSelected(self):
-        if self.logic.DestinationNode and self.tagDestinationNode:
-            self.logic.DestinationNode.RemoveObserver(self.tagDestinationNode)
-            if self.logic.DestinationNode.GetDisplayNode() and self.tagDestinationDispNode:
-                self.logic.DestinationNode.GetDisplayNode().RemoveObserver(self.tagDestinationDispNode)
-
-        # Update destination node
         if self.DestinationSelector.currentNode():
             self.logic.DestinationNode = self.DestinationSelector.currentNode()
-
-            if self.logic.DestinationNode.GetDisplayNode():
-                self.tagDestinationDispNode = self.logic.DestinationNode.GetDisplayNode().AddObserver(vtk.vtkCommand.ModifiedEvent, self.onModelDisplayModifiedEvent)
-
         if (self.SourceSelector.currentNode() != None and self.DestinationSelector.currentNode() != None):
             self.logic.SourceNode.SetAttribute('CurveEditor.CurveModel',self.logic.DestinationNode.GetID())
 
@@ -215,9 +195,9 @@ class CurveEditorWidget:
                 pos = [0, 0, 0]
                 self.logic.SourceNode.GetNthFiducialPosition(i, pos)
                 cellName = qt.QTableWidgetItem(name)
-                cellX = qt.QTableWidgetItem(pos[0])
-                cellY = qt.QTableWidgetItem(pos[1])
-                cellZ = qt.QTableWidgetItem(pos[2])
+                cellX = qt.QTableWidgetItem('%.3f' % pos[0])
+                cellY = qt.QTableWidgetItem('%.3f' % pos[1])
+                cellZ = qt.QTableWidgetItem('%.3f' % pos[2])
                 row = [cellName, cellX, cellY, cellZ]
                 self.FiducialTable.setItem(i, 0, row[0])
                 self.FiducialTable.setItem(i, 1, row[1])
@@ -227,8 +207,8 @@ class CurveEditorWidget:
 
             self.FiducialTable.show()
 
-    def onTubeUpdated(self):
-        self.logic.setTubeRadius(self.RadiusSliderWidget.value)
+    def onThicknessUpdated(self):
+        self.logic.setCurveThickness(self.RadiusSliderWidget.value)
 
     def onSelectInterpolationLinear(self, s):
         self.logic.setInterpolationMethod(0)
@@ -236,43 +216,38 @@ class CurveEditorWidget:
     def onSelectInterpolationSpline(self, s):
         self.logic.setInterpolationMethod(1)
 
+    def generateCurve(self):
+        self.logic.updateCurve()
+        self.updateFiducialsTable()
+
 class Logic:
 
     def __init__(self):
         self.SourceNode = None
         self.DestinationNode = None
-        self.TubeRadius = 5.0
+        self.CurveThickness = 5.0
 
         self.NumberOfIntermediatePoints = 20
         self.ModelColor = [0.0, 1.0, 0.0]
 
         self.CurvePoly = None
-        self.interpResolution = 25
+        self.Resolution = 30
 
-        # Interpolation method:
-        #  0: None
-        #  1: Cardinal Spline (VTK default)
         self.InterpolationMethod = 0
 
-        self.CurveLength = -1.0  ## Length of the curve (<0 means 'not measured')
+#        self.CurveLength = -1.0  ## Length of the curve (<0 means 'not measured')
 
-    def setTubeRadius(self, radius):
-        self.TubeRadius = radius
+    def setCurveThickness(self, radius):
+        self.CurveThickness = radius
         self.updateCurve()
 
     def setInterpolationMethod(self, method):
-        if method > 3 or method < 0:
-            self.InterpolationMethod = 0
-        else:
-            self.InterpolationMethod = method
+        self.InterpolationMethod = method
         self.updateCurve()
 
-    def generateCurve(self):
-        self.updateCurve()
-
-    def controlPointsUpdated(self,caller,event):
-        if caller.IsA('vtkMRMLMarkupsFiducialNode') and event == 'ModifiedEvent':
-            self.updateCurve()
+#    def controlPointsUpdated(self,caller,event):
+#        if caller.IsA('vtkMRMLMarkupsFiducialNode') and event == 'ModifiedEvent':
+#            self.updateCurve()
 
     def nodeToPoly(self, sourceNode, outputPoly):
         points = vtk.vtkPoints()
@@ -320,7 +295,7 @@ class Logic:
 
         # Interpolate x, y and z by using the three spline filters and
         # create new points
-        nInterpolatedPoints = (self.interpResolution+2)*(nOfControlPoints-1) # One section is devided into self.interpResolution segments
+        nInterpolatedPoints = (self.Resolution+2)*(nOfControlPoints-1) # One section is devided into self.Resolution segments
         points = vtk.vtkPoints()
         r = [0.0, 0.0]
         aSplineX.GetParametricRange(r)
@@ -404,7 +379,7 @@ class Logic:
                 if self.CurvePoly != None:
                     self.CurvePoly.Initialize()
 
-                self.CurveLength = 0.0
+#                self.CurveLength = 0.0
 
             else:
 
@@ -423,12 +398,12 @@ class Logic:
                 elif self.InterpolationMethod == 1: # Cardinal Spline
                     self.nodeToPolySpline(self.SourceNode, self.CurvePoly)
 
-                self.CurveLength = self.calculateLineLength(self.CurvePoly)
+#                self.CurveLength = self.calculateLineLength(self.CurvePoly)
 
             tubeFilter = vtk.vtkTubeFilter()
 
             tubeFilter.SetInputData(self.CurvePoly)
-            tubeFilter.SetRadius(self.TubeRadius)
+            tubeFilter.SetRadius(self.CurveThickness)
             tubeFilter.SetNumberOfSides(20)
             tubeFilter.CappingOn()
             tubeFilter.Update()
