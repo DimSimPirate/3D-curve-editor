@@ -144,6 +144,7 @@ class CurveEditorWidget:
 
         self.layout.addStretch(1)
 
+    #Sets the selected source nodes from the dropdown menu
     def onSourceSelected(self):
         if self.SourceSelector.currentNode():
             self.logic.SourceNode = self.SourceSelector.currentNode()
@@ -154,12 +155,14 @@ class CurveEditorWidget:
         if (self.SourceSelector.currentNode() != None and self.DestinationSelector.currentNode() != None):
             self.logic.SourceNode.SetAttribute('CurveEditor.CurveModel',self.logic.DestinationNode.GetID())
 
+    #Sets the selected curve destination from the dropdown menu
     def onDestinationSelected(self):
         if self.DestinationSelector.currentNode():
             self.logic.DestinationNode = self.DestinationSelector.currentNode()
         if (self.SourceSelector.currentNode() != None and self.DestinationSelector.currentNode() != None):
             self.logic.SourceNode.SetAttribute('CurveEditor.CurveModel',self.logic.DestinationNode.GetID())
 
+    #Checks whether the inputs for a new fiducial are valid
     def checkInputState(self, inputSelection):
         if inputSelection == 'x':
             sender = self.AddX
@@ -174,6 +177,7 @@ class CurveEditorWidget:
             colour = '#f6989d'
         sender.setStyleSheet('QLineEdit {background-color: %s}' % colour)
 
+    #Adds new fiducial to selected source points
     def addFiducial(self):
         if self.SourceSelector.currentNode != None:
             if self.AddX.hasAcceptableInput and self.AddY.hasAcceptableInput and self.AddZ.hasAcceptableInput:
@@ -182,7 +186,9 @@ class CurveEditorWidget:
                 z = float(self.AddZ.text)
                 self.logic.SourceNode.AddFiducial(x, y, z)
                 self.updateFiducialsTable()
+                self.logic.updateCurve()
 
+    #Updates table of fiducial names and positions
     def updateFiducialsTable(self):
         if not self.logic.SourceNode or self.logic.SourceNode == None:
             self.FiducialTable.clear()
@@ -209,15 +215,19 @@ class CurveEditorWidget:
 
             self.FiducialTable.show()
 
+    #Sets radius of tube to slider value
     def onThicknessUpdated(self):
         self.logic.setCurveThickness(self.RadiusSliderWidget.value)
 
+    #Sets interpolation method to linear
     def onSelectInterpolationLinear(self, s):
         self.logic.setInterpolationMethod(0)
 
+    #Sets interpolation method to spline
     def onSelectInterpolationSpline(self, s):
         self.logic.setInterpolationMethod(1)
 
+    #Creates or updates a new curve and updates the fiducials table
     def generateCurve(self):
         self.logic.updateCurve()
         self.updateFiducialsTable()
@@ -229,9 +239,10 @@ class Logic:
         self.DestinationNode = None
         self.CurveThickness = 5.0
         self.NumberOfIntermediatePoints = 20
-        self.ModelColor = [0.0, 1.0, 0.0]
+        self.CurveColour = [0.0, 1.0, 0.0]
         self.CurvePoly = None
         self.Resolution = 30
+        self.CurveFaces = 20
         self.InterpolationMethod = 0
 
     def setCurveThickness(self, radius):
@@ -242,32 +253,34 @@ class Logic:
         self.InterpolationMethod = method
         self.updateCurve()
 
-    def nodeToPoly(self, sourceNode, outputPoly):
+    #Takes a set of fiducials and outputs polyline
+    def nodesToLinear(self, sourceNode, outputPoly):
         points = vtk.vtkPoints()
-        cellArray = vtk.vtkCellArray()
+        cells = vtk.vtkCellArray()
         numControlPoints = sourceNode.GetNumberOfFiducials()
         pos = [0.0, 0.0, 0.0]
-        posStartEnd = [0.0, 0.0, 0.0]
         offset = 0
 
         points.SetNumberOfPoints(numControlPoints)
-        cellArray.InsertNextCell(numControlPoints)
+        cells.InsertNextCell(numControlPoints)
 
         for i in range(numControlPoints):
             sourceNode.GetNthFiducialPosition(i,pos)
             points.SetPoint(offset+i,pos)
-            cellArray.InsertCellPoint(offset+i)
+            cells.InsertCellPoint(offset+i)
 
         offset = offset + numControlPoints
 
         outputPoly.Initialize()
         outputPoly.SetPoints(points)
-        outputPoly.SetLines(cellArray)
+        outputPoly.SetLines(cells)
 
-    def nodeToPolySpline(self, sourceNode, outputPoly):
+    #Takes a set of fiducials and outputs a splined polyline
+    def nodesToSpline(self, sourceNode, outputPoly):
         numControlPoints = sourceNode.GetNumberOfFiducials()
         pos = [0.0, 0.0, 0.0]
 
+        #Three independent splines for x, y, and z
         xSpline = vtk.vtkCardinalSpline()
         ySpline = vtk.vtkCardinalSpline()
         zSpline = vtk.vtkCardinalSpline()
@@ -281,6 +294,7 @@ class Logic:
             ySpline.AddPoint(i, pos[1])
             zSpline.AddPoint(i, pos[2])
 
+        #There will be a self.resolution number of intermediate points
         interpolatedPoints = (self.Resolution+2)*(numControlPoints-1)
         points = vtk.vtkPoints()
         r = [0.0, 0.0]
@@ -304,10 +318,9 @@ class Logic:
         outputPoly.SetPoints(points)
         outputPoly.SetLines(lines)
 
+    #Updates the curve based on logic parameters
     def updateCurve(self):
-
         if self.SourceNode and self.DestinationNode:
-
             if self.SourceNode.GetNumberOfFiducials() < 2:
                 if self.CurvePoly != None:
                     self.CurvePoly.Initialize()
@@ -316,18 +329,18 @@ class Logic:
                     self.CurvePoly = vtk.vtkPolyData()
                 if self.DestinationNode.GetDisplayNodeID() == None:
                     modelDisplayNode = slicer.vtkMRMLModelDisplayNode()
-                    modelDisplayNode.SetColor(self.ModelColor)
+                    modelDisplayNode.SetColor(self.CurveColour)
                     slicer.mrmlScene.AddNode(modelDisplayNode)
                     self.DestinationNode.SetAndObserveDisplayNodeID(modelDisplayNode.GetID())
                 if self.InterpolationMethod == 0:
-                    self.nodeToPoly(self.SourceNode, self.CurvePoly)
-                elif self.InterpolationMethod == 1: # Cardinal Spline
-                    self.nodeToPolySpline(self.SourceNode, self.CurvePoly)
+                    self.nodesToLinear(self.SourceNode, self.CurvePoly)
+                elif self.InterpolationMethod == 1:
+                    self.nodesToSpline(self.SourceNode, self.CurvePoly)
 
             tubeFilter = vtk.vtkTubeFilter()
             tubeFilter.SetInputData(self.CurvePoly)
             tubeFilter.SetRadius(self.CurveThickness)
-            tubeFilter.SetNumberOfSides(20)
+            tubeFilter.SetNumberOfSides(self.CurveFaces)
             tubeFilter.CappingOn()
             tubeFilter.Update()
 
