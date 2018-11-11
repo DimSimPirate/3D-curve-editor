@@ -1,6 +1,6 @@
 # Welcome to Curve Editor!
 
-This module will allow you to create curves to add to any scene
+This module will allow you to create curves to add to any scene in the Slicer application
 
 ## Installation
 * In Slicer, click Edit -> Application settings
